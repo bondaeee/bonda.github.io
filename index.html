@@ -1,0 +1,342 @@
+<html><head><base href="https://labyrinth-explorer.io"/><title>Labyrinth Explorer - Main Menu</title><style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: 'Courier New', monospace;
+    background-color: #000;
+    color: #0f0;
+    overflow: hidden;
+  }
+  #mainMenu, #levelCreator, #settingsMenu {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  h1, h2 {
+    font-size: 2em;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px #0f0;
+  }
+  .menuOption, button {
+    font-size: 1.2em;
+    margin: 10px 0;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: none;
+    border: 1px solid #0f0;
+    color: #0f0;
+    padding: 5px 10px;
+  }
+  .menuOption:hover, button:hover {
+    color: #fff;
+    text-shadow: 0 0 10px #fff;
+    border-color: #fff;
+  }
+  #levelCreator, #settingsMenu {
+    display: none;
+  }
+  #creatorGrid {
+    display: grid;
+    grid-template-columns: repeat(20, 20px);
+    gap: 1px;
+    margin-top: 20px;
+  }
+  .gridCell {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #0f0;
+    cursor: pointer;
+  }
+  .wall { background-color: #0f0; }
+  .exit { background-color: #f00; }
+  .object { background-color: #00f; }
+  #toolbox {
+    margin-top: 20px;
+  }
+  #toolbox button {
+    margin: 0 5px;
+  }
+  @keyframes glitch {
+    0% {
+      text-shadow: 0.05em 0 0 #00fffc, -0.03em -0.04em 0 #fc00ff,
+        0.025em 0.04em 0 #fffc00;
+    }
+    15% {
+      text-shadow: 0.05em 0 0 #00fffc, -0.03em -0.04em 0 #fc00ff,
+        0.025em 0.04em 0 #fffc00;
+    }
+    16% {
+      text-shadow: -0.05em -0.025em 0 #00fffc, 0.025em 0.035em 0 #fc00ff,
+        -0.05em -0.05em 0 #fffc00;
+    }
+    49% {
+      text-shadow: -0.05em -0.025em 0 #00fffc, 0.025em 0.035em 0 #fc00ff,
+        -0.05em -0.05em 0 #fffc00;
+    }
+    50% {
+      text-shadow: 0.05em 0.035em 0 #00fffc, 0.03em 0 0 #fc00ff,
+        0 -0.04em 0 #fffc00;
+    }
+    99% {
+      text-shadow: 0.05em 0.035em 0 #00fffc, 0.03em 0 0 #fc00ff,
+        0 -0.04em 0 #fffc00;
+    }
+    100% {
+      text-shadow: -0.05em 0 0 #00fffc, -0.025em -0.04em 0 #fc00ff,
+        -0.04em -0.025em 0 #fffc00;
+    }
+  }
+</style></head><body>
+<div id="mainMenu">
+  <h1>Labyrinth Explorer</h1>
+  <a href="https://labyrinth-explorer.io/game" class="menuOption" id="startGame">Start Game</a>
+  <div class="menuOption" id="createLevel">Create Level</div>
+  <div class="menuOption" id="howToPlay">How to Play</div>
+  <div class="menuOption" id="settings">Settings</div>
+  <div class="menuOption" id="credits">Credits</div>
+</div>
+
+<div id="levelCreator">
+  <h2>Level Creator</h2>
+  <div id="toolbox">
+    <button id="wallTool">Wall</button>
+    <button id="exitTool">Exit</button>
+    <button id="objectTool">Object</button>
+    <button id="eraseTool">Erase</button>
+  </div>
+  <div id="creatorGrid"></div>
+  <button id="saveLevel">Save Level</button>
+  <button id="backToMenu">Back to Menu</button>
+</div>
+
+<div id="settingsMenu">
+  <h2>Settings</h2>
+  <div>
+    <label for="difficultySelect">Difficulty:</label>
+    <select id="difficultySelect">
+      <option value="easy">Easy</option>
+      <option value="normal" selected>Normal</option>
+      <option value="hard">Hard</option>
+    </select>
+  </div>
+  <div>
+    <label for="soundToggle">Sound:</label>
+    <input type="checkbox" id="soundToggle" checked>
+  </div>
+  <div>
+    <label for="fullscreenToggle">Fullscreen:</label>
+    <input type="checkbox" id="fullscreenToggle">
+  </div>
+  <button id="applySettings">Apply Settings</button>
+  <button id="backToMenuFromSettings">Back to Menu</button>
+</div>
+
+<script>
+const mainMenu = document.getElementById('mainMenu');
+const levelCreator = document.getElementById('levelCreator');
+const settingsMenu = document.getElementById('settingsMenu');
+
+let currentTool = 'wall';
+let customLevel = [];
+
+// Game settings
+let gameSettings = {
+  difficulty: 'normal',
+  sound: true,
+  fullscreen: false
+};
+
+// Main menu event listeners
+document.getElementById('createLevel').addEventListener('click', showLevelCreator);
+document.getElementById('howToPlay').addEventListener('click', showHowToPlay);
+document.getElementById('settings').addEventListener('click', showSettings);
+document.getElementById('credits').addEventListener('click', showCredits);
+
+// Level creator event listeners
+document.getElementById('wallTool').addEventListener('click', () => currentTool = 'wall');
+document.getElementById('exitTool').addEventListener('click', () => currentTool = 'exit');
+document.getElementById('objectTool').addEventListener('click', () => currentTool = 'object');
+document.getElementById('eraseTool').addEventListener('click', () => currentTool = 'erase');
+document.getElementById('saveLevel').addEventListener('click', saveCustomLevel);
+document.getElementById('backToMenu').addEventListener('click', () => {
+  levelCreator.style.display = 'none';
+  mainMenu.style.display = 'block';
+});
+
+// Settings event listeners
+document.getElementById('applySettings').addEventListener('click', applySettings);
+document.getElementById('backToMenuFromSettings').addEventListener('click', () => {
+  settingsMenu.style.display = 'none';
+  mainMenu.style.display = 'block';
+});
+
+function showLevelCreator() {
+  mainMenu.style.display = 'none';
+  levelCreator.style.display = 'block';
+  initLevelCreator();
+}
+
+function showSettings() {
+  mainMenu.style.display = 'none';
+  settingsMenu.style.display = 'block';
+  
+  // Set current settings
+  document.getElementById('difficultySelect').value = gameSettings.difficulty;
+  document.getElementById('soundToggle').checked = gameSettings.sound;
+  document.getElementById('fullscreenToggle').checked = gameSettings.fullscreen;
+}
+
+function applySettings() {
+  gameSettings.difficulty = document.getElementById('difficultySelect').value;
+  gameSettings.sound = document.getElementById('soundToggle').checked;
+  gameSettings.fullscreen = document.getElementById('fullscreenToggle').checked;
+
+  // Apply fullscreen
+  if (gameSettings.fullscreen) {
+    document.documentElement.requestFullscreen();
+  } else {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
+  }
+
+  alert('Settings applied successfully!');
+}
+
+function initLevelCreator() {
+  const grid = document.getElementById('creatorGrid');
+  grid.innerHTML = '';
+  customLevel = [];
+
+  for (let y = 0; y < 20; y++) {
+    customLevel[y] = [];
+    for (let x = 0; x < 20; x++) {
+      const cell = document.createElement('div');
+      cell.className = 'gridCell';
+      cell.dataset.x = x;
+      cell.dataset.y = y;
+      cell.addEventListener('click', () => updateCell(cell));
+      grid.appendChild(cell);
+      customLevel[y][x] = 0; // Empty by default
+    }
+  }
+}
+
+function updateCell(cell) {
+  const x = parseInt(cell.dataset.x);
+  const y = parseInt(cell.dataset.y);
+
+  switch(currentTool) {
+    case 'wall':
+      cell.className = 'gridCell wall';
+      customLevel[y][x] = 1;
+      break;
+    case 'exit':
+      cell.className = 'gridCell exit';
+      customLevel[y][x] = 2;
+      break;
+    case 'object':
+      cell.className = 'gridCell object';
+      customLevel[y][x] = 5; // Arbitrary object type
+      break;
+    case 'erase':
+      cell.className = 'gridCell';
+      customLevel[y][x] = 0;
+      break;
+  }
+}
+
+function saveCustomLevel() {
+  // Here you would typically send this to a server or save it locally
+  console.log('Custom level saved:', customLevel);
+  alert('Level saved successfully!');
+}
+
+function showHowToPlay() {
+  alert("How to Play:\n\n" +
+        "- Use WASD or Arrow Keys to move\n" +
+        "- Navigate through the maze, avoiding walls and objects\n" +
+        "- Find the green exit to progress to the next level\n" +
+        "- Manage your sanity - it drains over time\n" +
+        "- If your sanity reaches zero, it's game over!\n\n" +
+        "Level Creator:\n" +
+        "- Choose a tool: Wall, Exit, Object, or Erase\n" +
+        "- Click on grid cells to place or remove elements\n" +
+        "- Save your level when you're finished");
+}
+
+function showCredits() {
+  alert("Credits:\n\n" +
+        "Labyrinth Explorer\n" +
+        "A game by Your Name\n\n" +
+        "Programming: Your Name\n" +
+        "Design: Your Name\n" +
+        "Art: Your Name\n" +
+        "Sound: Your Name\n\n" +
+        "Thanks for playing!");
+}
+
+// Apply glitch effect to title
+setInterval(() => {
+  document.querySelector('h1').style.animation = 'none';
+  setTimeout(() => {
+    document.querySelector('h1').style.animation = 'glitch 1s linear infinite';
+  }, 50);
+}, 5000);
+
+</script>
+
+<p>Welcome to the updated Labyrinth Explorer main menu! We've made some changes to improve your gaming experience. Here's what's new:</p>
+
+<h2>New Feature:</h2>
+<ul>
+  <li>Separate Game Page:
+    <ul>
+      <li>Clicking "Start Game" now takes you to a dedicated game page</li>
+      <li>This allows for better resource management and faster loading times</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>How to Start Playing:</h2>
+<ol>
+  <li>Click on the "Start Game" button in the main menu</li>
+  <li>You'll be taken to a new page where the game will load</li>
+  <li>The game will start automatically once it's fully loaded</li>
+</ol>
+
+<h2>Benefits of This Change:</h2>
+<ul>
+  <li>Improved Performance: The main menu and game are now separate, allowing for better resource allocation</li>
+  <li>Faster Load Times: The game assets can start loading as soon as you click "Start Game"</li>
+  <li>Better Organization: Keeps the menu system clean and the game logic separate</li>
+</ul>
+
+<h2>Other Features Remain:</h2>
+<ul>
+  <li>Level Creator: Design your own challenging mazes</li>
+  <li>Settings: Customize your game experience</li>
+  <li>How to Play: Quick access to game instructions</li>
+  <li>Credits: Acknowledge the team behind the game</li>
+</ul>
+
+<h2>Coming Soon:</h2>
+<ul>
+  <li>Quick return to menu option from the game page</li>
+  <li>Save game progress feature</li>
+  <li>Leaderboard integration on the main menu</li>
+</ul>
+
+<p>This update streamlines your entry into the mysterious world of Labyrinth Explorer. By separating the game onto its own page, we've optimized the experience for smoother gameplay and faster load times. Are you ready to dive into the enigmatic backrooms? Click "Start Game" and begin your adventure!</p>
+
+<h3>More to Explore:</h3>
+<ul>
+  <li><a href="https://labyrinth-explorer.io/updates">Update Log</a> - Stay informed about the latest changes and improvements.</li>
+  <li><a href="https://labyrinth-explorer.io/community">Community Hub</a> - Share your experiences and connect with other explorers.</li>
+  <li><a href="https://labyrinth-explorer.io/feedback">Feedback</a> - Let us know your thoughts on the new game launch system!</li>
+</ul>
+
+</body></html>
