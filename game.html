@@ -1,0 +1,373 @@
+<html><head><base href="https://labyrinth-explorer.io/game"><title>Labyrinth Explorer - Game (Enhanced Speed)</title>
+<style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: 'Courier New', monospace;
+    background-color: #000;
+    color: #0f0;
+    overflow: hidden;
+  }
+  #gameCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #ui {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 18px;
+  }
+  #sanityMeter {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    width: 200px;
+    height: 20px;
+    border: 1px solid #0f0;
+  }
+  #sanityFill {
+    height: 100%;
+    width: 100%;
+    background-color: #0f0;
+    transition: width 0.5s ease-in-out;
+  }
+  #debugInfo {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 14px;
+    text-align: right;
+  }
+  #loadingScreen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  .spinner {
+    border: 4px solid #0f0;
+    border-top: 4px solid #000;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  #speedMeter {
+    position: absolute;
+    top: 40px;
+    left: 10px;
+    font-size: 18px;
+  }
+</style>
+</head>
+<body>
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <p>Loading Labyrinth...</p>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+<div id="ui">Level: <span id="levelCounter">1</span></div>
+<div id="speedMeter">Speed: <span id="speedValue">10</span></div>
+<div id="sanityMeter"><div id="sanityFill"></div></div>
+<div id="debugInfo"></div>
+
+<script>
+const gameCanvas = document.getElementById('gameCanvas');
+const ctx = gameCanvas.getContext('2d');
+const ui = document.getElementById('ui');
+const levelCounter = document.getElementById('levelCounter');
+const sanityMeter = document.getElementById('sanityMeter');
+const sanityFill = document.getElementById('sanityFill');
+const debugInfo = document.getElementById('debugInfo');
+const loadingScreen = document.getElementById('loadingScreen');
+const speedValue = document.getElementById('speedValue');
+
+// Game constants
+const TILE_SIZE = 40;
+const MAP_WIDTH = 50;
+const MAP_HEIGHT = 50;
+const PLAYER_SPEED = 10; // Increased from 5 to 10
+const FOOTSTEP_INTERVAL = 200; // Decreased from 400 to 200 for faster footsteps
+const MAX_SANITY = 100;
+const SANITY_DRAIN_RATE = 0.02;
+const SANITY_BOOST_ON_LEVEL_COMPLETE = 20;
+
+// Game variables
+let player, map, objects, currentLevel, keys, lastTime, ambientSound, footstepSound;
+
+// Tile types
+const TILE_TYPES = {
+  EMPTY: 0,
+  WALL: 1,
+  EXIT: 2,
+  CORRIDOR: 3,
+  LARGE_ROOM: 4
+};
+
+// Object types
+const OBJECT_TYPES = {
+  CHAIR: 5,
+  TABLE: 6,
+  DOOR: 7,
+  SOFA: 8
+};
+
+function initGame() {
+  player = {
+    x: TILE_SIZE,
+    y: TILE_SIZE,
+    size: TILE_SIZE / 2,
+    velocityX: 0,
+    velocityY: 0,
+    sanity: MAX_SANITY,
+    lastFootstep: 0,
+    speed: PLAYER_SPEED
+  };
+  currentLevel = 1;
+  keys = {};
+  lastTime = 0;
+  
+  generateMap();
+  initAudio();
+  
+  gameCanvas.width = window.innerWidth;
+  gameCanvas.height = window.innerHeight;
+  
+  window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+  
+  loadingScreen.style.display = 'none';
+  requestAnimationFrame(update);
+}
+
+function generateMap() {
+  map = [];
+  objects = [];
+  
+  // Generate basic maze structure
+  for (let y = 0; y < MAP_HEIGHT; y++) {
+    map[y] = [];
+    for (let x = 0; x < MAP_WIDTH; x++) {
+      if (x === 0 || y === 0 || x === MAP_WIDTH - 1 || y === MAP_HEIGHT - 1) {
+        map[y][x] = TILE_TYPES.WALL;
+      } else {
+        map[y][x] = Math.random() < 0.3 ? TILE_TYPES.WALL : TILE_TYPES.EMPTY;
+      }
+    }
+  }
+  
+  // Ensure start position is clear
+  map[1][1] = TILE_TYPES.EMPTY;
+  
+  // Place exit
+  let exitPlaced = false;
+  while (!exitPlaced) {
+    const exitX = Math.floor(Math.random() * (MAP_WIDTH - 2)) + 1;
+    const exitY = Math.floor(Math.random() * (MAP_HEIGHT - 2)) + 1;
+    if (map[exitY][exitX] === TILE_TYPES.EMPTY) {
+      map[exitY][exitX] = TILE_TYPES.EXIT;
+      exitPlaced = true;
+    }
+  }
+  
+  // Place objects
+  for (let i = 0; i < 20; i++) {
+    const objX = Math.floor(Math.random() * (MAP_WIDTH - 2)) + 1;
+    const objY = Math.floor(Math.random() * (MAP_HEIGHT - 2)) + 1;
+    if (map[objY][objX] === TILE_TYPES.EMPTY) {
+      const objType = Math.floor(Math.random() * 4) + 5; // Random object type
+      objects.push({ x: objX, y: objY, type: objType });
+    }
+  }
+}
+
+function drawMap() {
+  const offsetX = Math.floor(gameCanvas.width / 2 - player.x);
+  const offsetY = Math.floor(gameCanvas.height / 2 - player.y);
+
+  for (let y = 0; y < MAP_HEIGHT; y++) {
+    for (let x = 0; x < MAP_WIDTH; x++) {
+      const drawX = x * TILE_SIZE + offsetX;
+      const drawY = y * TILE_SIZE + offsetY;
+      
+      if (drawX < -TILE_SIZE || drawY < -TILE_SIZE || 
+          drawX > gameCanvas.width || drawY > gameCanvas.height) {
+        continue; // Skip tiles outside view
+      }
+
+      switch(map[y][x]) {
+        case TILE_TYPES.WALL:
+          ctx.fillStyle = '#0f0';
+          ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
+          break;
+        case TILE_TYPES.EXIT:
+          ctx.fillStyle = '#f00';
+          ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
+          break;
+      }
+    }
+  }
+  
+  // Draw objects
+  objects.forEach(obj => {
+    const drawX = obj.x * TILE_SIZE + offsetX;
+    const drawY = obj.y * TILE_SIZE + offsetY;
+    ctx.fillStyle = '#00f';
+    ctx.fillRect(drawX, drawY, TILE_SIZE, TILE_SIZE);
+  });
+}
+
+function drawPlayer() {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(
+    gameCanvas.width / 2 - player.size / 2,
+    gameCanvas.height / 2 - player.size / 2,
+    player.size,
+    player.size
+  );
+}
+
+function updatePlayerPosition(deltaTime) {
+  const speed = player.speed * deltaTime;
+  
+  player.velocityX = 0;
+  player.velocityY = 0;
+  
+  if (keys['w'] || keys['arrowup']) player.velocityY -= speed;
+  if (keys['s'] || keys['arrowdown']) player.velocityY += speed;
+  if (keys['a'] || keys['arrowleft']) player.velocityX -= speed;
+  if (keys['d'] || keys['arrowright']) player.velocityX += speed;
+  
+  const newX = player.x + player.velocityX;
+  const newY = player.y + player.velocityY;
+  
+  // Collision detection
+  const tileX = Math.floor(newX / TILE_SIZE);
+  const tileY = Math.floor(newY / TILE_SIZE);
+  
+  if (map[tileY][tileX] !== TILE_TYPES.WALL) {
+    player.x = newX;
+    player.y = newY;
+  }
+  
+  // Check for exit
+  if (map[tileY][tileX] === TILE_TYPES.EXIT) {
+    currentLevel++;
+    player.sanity = Math.min(MAX_SANITY, player.sanity + SANITY_BOOST_ON_LEVEL_COMPLETE);
+    levelCounter.textContent = currentLevel;
+    generateMap();
+    player.x = TILE_SIZE;
+    player.y = TILE_SIZE;
+  }
+  
+  // Play footstep sound
+  if ((player.velocityX !== 0 || player.velocityY !== 0) && 
+      Date.now() - player.lastFootstep > FOOTSTEP_INTERVAL) {
+    footstepSound.play();
+    player.lastFootstep = Date.now();
+  }
+}
+
+function updateSanity(deltaTime) {
+  player.sanity -= SANITY_DRAIN_RATE * deltaTime;
+  if (player.sanity <= 0) {
+    alert('Game Over! Your sanity has depleted.');
+    initGame();
+  }
+  sanityFill.style.width = `${(player.sanity / MAX_SANITY) * 100}%`;
+}
+
+function update(time) {
+  const deltaTime = (time - lastTime) / 1000;
+  lastTime = time;
+  
+  updatePlayerPosition(deltaTime);
+  updateSanity(deltaTime);
+  
+  ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+  
+  drawMap();
+  drawPlayer();
+  
+  debugInfo.textContent = `
+    Player: (${player.x.toFixed(2)}, ${player.y.toFixed(2)})
+    Velocity: (${player.velocityX.toFixed(2)}, ${player.velocityY.toFixed(2)})
+    Sanity: ${player.sanity.toFixed(2)}
+  `;
+  
+  requestAnimationFrame(update);
+}
+
+function initAudio() {
+  ambientSound = new Audio('https://labyrinth-explorer.io/audio/ambient.mp3');
+  ambientSound.loop = true;
+  ambientSound.volume = 0.3;
+  
+  footstepSound = new Audio('https://labyrinth-explorer.io/audio/footstep.mp3');
+  footstepSound.volume = 0.2;
+  
+  ambientSound.play();
+}
+
+// Start the game
+window.onload = initGame;
+</script>
+
+<p>Welcome to the enhanced speed version of Labyrinth Explorer! We've made some changes to make your exploration faster and more dynamic. Here's what's new:</p>
+
+<h2>Speed Enhancements:</h2>
+<ul>
+  <li>Player Speed: Increased from 5 to 10, allowing for quicker movement through the labyrinth.</li>
+  <li>Footstep Interval: Decreased from 400ms to 200ms, matching the increased pace of movement.</li>
+  <li>New Speed Meter: Added a visual indicator of your current speed on the game interface.</li>
+</ul>
+
+<h2>Impact on Gameplay:</h2>
+<ul>
+  <li>Faster Exploration: Cover more ground in less time, allowing for quicker level completion.</li>
+  <li>Increased Challenge: The faster speed requires quicker reflexes to navigate tight corridors and avoid obstacles.</li>
+  <li>Balanced Sanity Drain: The sanity drain rate remains the same, making efficient navigation even more crucial.</li>
+</ul>
+
+<h2>Tips for High-Speed Navigation:</h2>
+<ol>
+  <li>Plan your route: With increased speed, looking ahead and planning your path is more important than ever.</li>
+  <li>Use bursts of speed: Alternate between full speed and cautious movement to balance speed and control.</li>
+  <li>Listen carefully: The faster footstep sounds can help you gauge your speed and maintain rhythm.</li>
+  <li>Watch your sanity: Remember, moving faster doesn't slow sanity drain, so keep an eye on your meter!</li>
+</ol>
+
+<h2>Future Enhancements:</h2>
+<ul>
+  <li>Speed power-ups: Temporary boosts to make you move even faster for a short duration.</li>
+  <li>Speed-based challenges: Special levels designed to test your navigation skills at high speeds.</li>
+  <li>Adjustable speed: Allow players to fine-tune their speed to match their playstyle.</li>
+</ul>
+
+<p>We hope you enjoy this faster-paced version of Labyrinth Explorer. The increased speed adds a new layer of excitement and challenge to the game. Can you maintain your composure and find the exit while zipping through the corridors? Test your reflexes and explore the labyrinth like never before!</p>
+
+<h3>Feedback Welcome:</h3>
+<p>We'd love to hear your thoughts on this speed enhancement. Is it too fast? Not fast enough? Let us know your experience with the new pace of gameplay!</p>
+
+<ul>
+  <li><a href="https://labyrinth-explorer.io/feedback">Share Your Feedback</a></li>
+  <li><a href="https://labyrinth-explorer.io/leaderboard">Check the Speed Run Leaderboard</a></li>
+  <li><a href="https://labyrinth-explorer.io/tips">Speed Running Tips and Tricks</a></li>
+</ul>
+
+</body></html>
